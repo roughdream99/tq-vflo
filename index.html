@@ -45,7 +45,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px 4px;b
 <div class="c"><h2>📖 사용 가이드</h2>
 <p class="sm">QLD·GPIQ 거치분은 계산에서 제외하고, TQQQ 7 : VFLO 3 계좌(7:3)만 계산합니다. VFLO는 기존 SGOV 자리를 대신하는 준현금 위험자산입니다. 숫자는 참고용이며 주문 전에 증권사 앱으로 확인하세요.</p>
 <details open><summary>0. 한눈에 보는 루틴</summary>
-<ul><li><b>매일/가끔(장 마감 후, 한국 시간 아침):</b> 앱을 열면 시장 데이터가 하루 한 번 자동 조회됩니다. 실패하면 [불러오기]를 다시 누르거나 직접 입력하세요.</li>
+<ul><li><b>매일/가끔(장 마감 후, 한국 시간 아침):</b> 앱을 열면 하루 한 번 시장 데이터를 불러옵니다. GitHub가 장 마감 뒤(한국 시간 아침 6~10시) 미리 받아 둔 종가를 먼저 쓰므로 보통 1~2초면 끝납니다. 실패하면 [불러오기]를 다시 누르거나 직접 입력하세요.</li>
 <li><b>매달 적립일:</b> "① 이번 달 정기 적립" 카드대로 TQQQ 온주와 VFLO 정수 주를 매수 → TQQQ·VFLO 수량, 평단가, 달러 현금(잔돈)을 증권사 값으로 수정 → [적립 완료 기록].</li>
 <li><b>하락장:</b> "② 낙폭" 카드에 VFLO 매도 수량이 뜹니다. VFLO를 팔아 그 대금으로 TQQQ를 사고, 수량을 수정한 뒤 [실행 기록]을 누르세요.</li>
 <li><b>가끔:</b> 백업 코드를 복사해 메모앱에 보관하세요.</li></ul>
@@ -66,7 +66,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px 4px;b
 <li>[QLD 대비 계산]을 누르면 날짜별 QLD 종가로 수량을 계산합니다. 내 7:3 계좌는 현재 환율로 달러 환산해 비교합니다.</li>
 <li><b>초과분</b>(내 계좌 − 그림자 QLD)이 계좌의 10% 이상이면 전환 검토 가능으로 안내되고, 전환 한도는 초과분의 절반입니다(제안값). 세금과 수수료는 반영하지 않은 비교입니다.</li></ol></details>
 <details><summary>4. 문제가 생겼을 때</summary><ul>
-<li><b>조회 실패:</b> 무료 프록시 특성상 가끔 막힙니다. 다시 누르거나 직접 입력하세요.</li>
+<li><b>조회 실패:</b> 미리 받아 둔 종가가 아직 갱신 전이면 무료 프록시로 직접 조회하는데, 이 방식은 가끔 막힙니다. 잠시 뒤 다시 누르거나 직접 입력하세요. GitHub 저장소 Actions 탭에서 'Update market data'를 실행하면 저장 종가가 바로 갱신됩니다.</li>
 <li><b>입력값이 사라졌을 때:</b> 파일 이름·위치가 바뀌었거나 다른 브라우저로 열면 보이지 않을 수 있습니다. 백업 코드로 복원하세요.</li>
 <li>세금은 단순 추정이 아닙니다. 연 250만 원 공제와 결제일 기준 귀속 등은 증권사 안내와 세무 전문가 확인이 필요합니다.</li></ul></details>
 </div>
@@ -123,6 +123,12 @@ function T(urls,chk,direct,ms){const ts=[];for(const u of urls)for(const p of px
 function ypar(x){const r=JSON.parse(x).chart.result[0],q=r.indicators.quote[0].close,a=[];r.timestamp.forEach((t,i)=>{if(q[i]!=null)a.push([dstr(t),q[i]])});return a}
 const yurl=(s,qs)=>['query1','query2'].map(h=>`https://${h}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(s)}?${qs}&interval=1d&_=${Date.now()}`);
 const okD=t=>{try{return daily(ypar(t))}catch(e){return false}};
+/* GitHub Actions가 장 마감 뒤 받아 두는 종가 파일. 최신이면 프록시를 쓰지 않음 */
+const RAW='https://raw.githubusercontent.com/roughdream99/tq-vflo/main/data.json';let DJ=null;
+const nyp=ms=>Object.fromEntries(ETF({year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(new Date(ms)).map(o=>[o.type,o.value]));
+const nys=ms=>{const p=nyp(ms);return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`};
+function lastClose(){let ms=Date.now();for(let i=0;i<8;i++,ms-=864e5){const p=nyp(ms);if(p.weekday=='Sat'||p.weekday=='Sun')continue;if(i>0||+p.hour*60+ +p.minute>=980)return `${p.year}-${p.month}-${p.day} 16:20`}return ''}
+async function getDJ(){for(const u of [RAW,'data.json']){try{const x=await one('',u+'?t='+Date.now(),t=>{try{return !!JSON.parse(t).px}catch(e){return false}},6000);return JSON.parse(x)}catch(e){}}return null}
 const sp=x=>x.trim().split('\n').slice(1).map(l=>l.split(',')).map(l=>[l[0],+l[4]]).filter(v=>v[1]>0);
 async function cl(s,rgs){rgs=rgs||['2y','1y'];
 for(const R of rgs){try{return fin(s,ypar(await T(yurl(s,'range='+R),okD)))}catch(e){}}
@@ -140,10 +146,24 @@ const jobs=[
 ['GPIQ',async()=>{const x=await T(yurl('GPIQ','range=1y&events=div'),okD),c=fin('GPIQ',ypar(x));set('gq',c.at(-1));const ev=JSON.parse(x).chart.result[0].events,dv=(ev&&ev.dividends)||{},lim=Date.now()/1000-365*864e2;let sum=0,n=0;for(const k in dv)if(dv[k].date>=lim){sum+=dv[k].amount;n++}D.gdiv=sum.toFixed(4);D.gdn=n}],
 ['QQQ',async()=>{const c=await cl('QQQ',['2y','5y']);if(c.length<60)throw 0;HQ=c;athUp(Math.max(...c));set('qq',c.at(-1));set('s20',av(c.slice(-20)))}]];
 const run=async j=>{try{await j[1]();ok.push(j[0]);$('ls').textContent='조회 중... 완료: '+ok.join(', ');go()}catch(e){bad.push(j)}};
-const q=jobs.slice();while(q.length)await run(q.shift());
-if(bad.length){const rt=bad.splice(0);for(const j of rt)await run(j)}
+$('ls').textContent='조회 중... (저장된 종가 확인)';
+let fresh=false,src='';DJ=await getDJ();
+if(DJ){try{const F=DJ.fails||[],MP={TQQQ:'tq',QLD:'ql',VFLO:'vf',GPIQ:'gq',QQQ:'qq'};
+for(const s in MP){const v=DJ.px&&DJ.px[s];if(!v||F.includes(s))continue;
+if(s=='QQQ'){if(DJ.ath)athUp(+DJ.ath);if(DJ.s20)set('s20',DJ.s20)}
+if(s=='GPIQ'&&DJ.gdiv){D.gdiv=(+DJ.gdiv.sum).toFixed(4);D.gdn=DJ.gdiv.n}
+set(MP[s],v[1]);LD[s]=v[0];ok.push(s)}
+if(DJ.fx&&!F.includes('FX')){set('fx',DJ.fx[1]);ok.push('환율')}
+if(DJ.ath)D.athd=td();
+const up=Date.parse(DJ.updated_utc);fresh=up>0&&nys(up)>=lastClose();src=' (저장된 종가, 뉴욕 '+nys(up).slice(5)+' 갱신)';go()}catch(e){ok=[]}}
+const fromDJ=ok.slice();if(!fresh)ok=[];
+const todo=jobs.filter(j=>!ok.includes(j[0]));
+if(todo.length){$('ls').textContent='조회 중... '+(fresh?'':'저장된 종가가 최신이 아니라 직접 조회합니다');
+await Promise.all(todo.map(run));
+if(bad.length&&!DJ){const rt=bad.splice(0);await Promise.all(rt.map(run))}}
 if(!bad.length)D.ts=new Date().toDateString();
-$('ls').textContent=(bad.length?'실패: '+bad.map(j=>j[0]).join(', ')+' → 다시 누르거나 직접 입력하세요. ':'전체 성공. ')+(ok.length?'성공: '+ok.join(', '):'')+(LD.QQQ?' / 기준일(종가) QQQ '+LD.QQQ.slice(5)+' · TQQQ '+(LD.TQQQ||'-').slice(5):'')+' / '+((Date.now()-t0)/1000).toFixed(1)+'초';
+const keep=bad.map(j=>j[0]).filter(n=>fromDJ.includes(n));
+$('ls').textContent=(bad.length?'실패: '+bad.map(j=>j[0]).join(', ')+(keep.length?' (이전 저장 종가 사용 중: '+keep.join(', ')+')':'')+' → 다시 누르거나 직접 입력하세요. ':'전체 성공'+(todo.length?'':src)+'. ')+(ok.length?'성공: '+ok.join(', '):'')+(LD.QQQ?' / 기준일(종가) QQQ '+LD.QQQ.slice(5)+' · TQQQ '+(LD.TQQQ||'-').slice(5):'')+' / '+((Date.now()-t0)/1000).toFixed(1)+'초';
 b.disabled=0;save();refresh();
 if(!D.athd||(Date.now()-new Date(D.athd))/864e5>=7)cl('QQQ',['10y','5y']).then(c=>{athUp(Math.max(...c));D.athd=td();save();refresh()}).catch(()=>{})}
 
@@ -209,7 +229,10 @@ function cfRender(){const t=D.cf.reduce((s,c)=>s+c.a,0);$('cfl').innerHTML=D.cf.
 function cfAdd(){const d=$('cfd').value,a=+$('cfa').value;if(!d||!a||isNaN(a))return;D.cf.push({d,a});D.cf.sort((x,y)=>x.d<y.d?-1:1);save();cfRender();$('cfa').value=''}
 function cfToday(){$('cfd').value=td()}
 function cfDel(i){D.cf.splice(i,1);save();cfRender()}
-async function histFrom(s,d0){const now=Math.floor(Date.now()/1000)+864e2;let p=Math.floor(Date.parse(d0)/1000)-10*864e2,all=[];const lo=new Date((p)*1000).toISOString().slice(0,10);
+async function histFrom(s,d0){
+try{if(!DJ)DJ=await getDJ();const H=DJ&&DJ.hist&&DJ.hist[s],lo0=new Date(Date.parse(d0)-10*864e5).toISOString().slice(0,10);
+if(H&&H.length&&H[0][0]<=lo0){const a=H.filter(v=>v[0]>=lo0);if(a.length&&(Date.now()-Date.parse(a.at(-1)[0]))/864e5<=8)return a}}catch(e){}
+const now=Math.floor(Date.now()/1000)+864e2;let p=Math.floor(Date.parse(d0)/1000)-10*864e2,all=[];const lo=new Date((p)*1000).toISOString().slice(0,10);
 try{while(p<now){const q=Math.min(p+2*365*864e2,now);let x;for(let k=0;k<2;k++){try{x=await T(yurl(s,`period1=${p}&period2=${q}`),t=>{try{return dly(ypar(t))}catch(e){return false}},false,12000);break}catch(e){if(k)throw e}}all=all.concat(ypar(x));p=q}}
 catch(e){all=[];const z=s=='KRW=X'?'usdkrw':s.toLowerCase()+'.us';const x=await T([`https://stooq.com/q/d/l/?s=${encodeURIComponent(z)}&i=d`],t=>t.startsWith('Date')&&t.length>200,false,20000);all=sp(x).filter(v=>v[0]>=lo)}
 const m=new Map();all.forEach(v=>m.set(v[0],v[1]));const a=[...m.entries()].sort((x,y)=>x[0]<y[0]?-1:1);if(a.length&&partial(a.at(-1)[0]))a.pop();if(!dly(a))throw 0;return a}
@@ -235,6 +258,6 @@ function bkFile(f){if(!f)return;const r=new FileReader();r.onload=()=>bkRestore(
 document.addEventListener('focusin',e=>{if(e.target.tagName=='INPUT'&&e.target.type!='file')setTimeout(()=>e.target.scrollIntoView({block:'center',behavior:'smooth'}),350)});
 
 refresh();cfRender();if(D.cfmsg){$('cms').textContent='입금 기준이 달러로 바뀌어 기존 내역을 비웠습니다. 달러로 다시 입력해 주세요.';D.cfmsg=0;save()}
-if(D.dv!==4){D.ts='';D.dv=4;save()}
+if(D.dv!==5){D.ts='';D.dv=5;save()}
 (D.ts!==new Date().toDateString()?load():Promise.resolve()).then(dailyPrompt);
 </script></body></html>
