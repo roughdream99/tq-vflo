@@ -98,9 +98,9 @@ if(!Array.isArray(D.cf))D.cf=[];
 if(D.cfu!=='usd'){if(D.cf.length)D.cfmsg=1;D.cf=[];D.cfu='usd'}
 const val=k=>+D[k]||0;
 function save(){try{localStorage.setItem('tqd',JSON.stringify(D))}catch(e){}}
-const vis=k=>!['vfq','vf'].includes(k)||val('vfq')>0;
+const vis=k=>{if(k=='vfq'||k=='vf')return val('vfq')>0;if(k=='sg')return val('sgq')>0&&!val('sg');if(k=='ql')return val('qldq')>0&&!val('ql');return true};
 function mk(arr,el,ex){$(el).innerHTML=arr.filter(([k])=>vis(k)).map(([k,l,d])=>{if(D[k]===undefined)D[k]=d;const t=TY[k]||'m';return `<div><label>${l} <b class="tg tg-${t}">${TT[t]}</b></label><input class="f-${t}" id="${k}" type="number" step="any" inputmode="decimal" value="${D[k]}" oninput="D['${k}']=this.value;go()"></div>`}).join('')+(ex||'')}
-function refresh(){mk(A,'acct');mk(M,'mkt','<div id="h52m"></div>');mk(S,'sx');go()}
+function refresh(){mk(A,'acct');mk(M,'mkt','<div id="h52m"></div><div id="sellm"></div><div id="buym"></div>');mk(S,'sx');go()}
 const f=(n,d=0)=>isFinite(n)?Number(n).toLocaleString('ko-KR',{maximumFractionDigits:d,minimumFractionDigits:d}):'-';
 const W=n=>f(Math.round(n))+'원';
 const U=n=>f(n,2)+'$';
@@ -149,7 +149,7 @@ if(P){D.sig=P.st;D.sigd=P.sw||'';D.sigk=sp+'/'+bp}
 const dd=qq&&h?qq/h-1:NaN;let st;
 if(!isFinite(dd))st=D.sig||'TQ';else if(dd<=-sp)st='SG';else if(dd>-bp)st='TQ';
 else st=(D.sig&&D.sigk==sp+'/'+bp)?D.sig:(val('sgq')>0&&!(val('qty')>0)?'SG':'TQ');
-return {st,dd,sp,bp,h,qq,sellAt:h*(1-sp),buyAt:h*(1-bp),sw:P?P.sw:(D.sigd||''),hid:D.h52d||'',band:isFinite(dd)&&dd<=-bp&&dd>-sp}}
+return {ok:isFinite(dd),st,dd,sp,bp,h,qq,sellAt:h*(1-sp),buyAt:h*(1-bp),sw:P?P.sw:(D.sigd||''),hid:D.h52d||'',band:isFinite(dd)&&dd<=-bp&&dd>-sp}}
 
 /* ---------- 데이터 불러오기 ---------- */
 async function load(){const b=$('lb');b.disabled=1;const t0=Date.now();let ok=[],bad=[];
@@ -191,9 +191,9 @@ return big('현재 신호 (QQQ 종가 기준)',tq?'🟢 TQQQ 보유 구간':'�
 /* ---------- 매매 카드 ---------- */
 function plan(X){const {fx,tq,sg,vf,mon,qty,sig}=X,sgq=val('sgq'),vfq=val('vfq'),usd=val('usd');let h='';
 const isTQ=sig.st=='TQ',tn=isTQ?'TQQQ':'SGOV',tp=isTQ?tq:sg,FE=.0025;
-if(!isTQ&&qty>0){const pr=qty*tq*(1-FE),n=sg?Math.floor((pr+usd)/sg):0;
+if(!isTQ&&qty>0&&sig.ok){const pr=qty*tq*(1-FE),n=sg?Math.floor((pr+usd)/sg):0;
 h+=big('② 매도 신호 — 전량 대피',`TQQQ ${f(qty)}주 전량 매도 → SGOV ${f(n)}주 매수`,`QQQ 종가가 매도선 ${U(sig.sellAt)} 아래입니다. 다음 미국 장(한국 시간 오늘 밤)에 TQQQ를 모두 팔고 대금 약 ${U(pr)}(${W(pr*fx)})${usd>0?'와 달러 현금 '+U(usd):''}으로 SGOV 정수 주를 삽니다(남는 달러는 현금). 이익이면 양도세 대상입니다. 실행 후 TQQQ·SGOV 수량과 달러 현금을 증권사 값으로 고치세요.`,'sell')}
-if(isTQ&&sgq>0){const pr=sgq*sg*(1-FE),n=tq?Math.floor((pr+usd)/tq):0;
+if(isTQ&&sgq>0&&sig.ok){const pr=sgq*sg*(1-FE),n=tq?Math.floor((pr+usd)/tq):0;
 h+=big('② 재매수 신호 — TQQQ 복귀',`SGOV ${f(sgq)}주 전량 매도 → TQQQ ${f(n)}주 매수`,`QQQ 종가가 재매수선 ${U(sig.buyAt)} 위로 회복했습니다. 다음 미국 장에 SGOV를 모두 팔고 대금 약 ${U(pr)}(${W(pr*fx)})${usd>0?'와 달러 현금 '+U(usd):''}으로 TQQQ 온주를 삽니다. 실행 후 수량과 달러 현금을 고치세요.`,'buy')}
 if(vfq>0){const pr=vfq*vf*(1-FE),n=tp?Math.floor((pr+usd)/tp):0;
 h+=big('기존 7:3 정리 (1회)',`VFLO ${f(vfq)}주 매도 → ${tn} ${f(n)}주 매수`,`새 규칙에서는 VFLO를 쓰지 않습니다. VFLO를 팔아 대금 약 ${vf?U(pr):'(VFLO 종가 필요)'}으로 지금 신호 쪽인 ${tn}를 사고, VFLO 수량을 0으로 고치세요.`,'warn')}
@@ -206,8 +206,8 @@ function todos(X){const L=[],t=td(),m=t.slice(0,7),B=(c,tx)=>`<button class="s" 
 const miss=M.filter(([k])=>vis(k)&&!val(k)).map(([,l])=>l.replace(/\(.*?\)/,''));
 if(miss.length)L.push(['🔴',`시장 데이터가 비어 있습니다 (${miss.join(', ')}) → 직접 입력하거나 [불러오기]를 다시 누르세요`]);
 else if(D.ts!==new Date().toDateString())L.push(['🟡','오늘 자동 조회가 완료되지 않았습니다 (이전 값 사용 중) → [불러오기]']);
-if(s.st=='SG'&&X.qty>0)L.push(['🔴','매도 신호: TQQQ 전량 매도 → SGOV 매수 (매매 카드 확인)']);
-if(s.st=='TQ'&&val('sgq')>0)L.push(['🔴','재매수 신호: SGOV 전량 매도 → TQQQ 매수 (매매 카드 확인)']);
+if(s.ok&&s.st=='SG'&&X.qty>0)L.push(['🔴','매도 신호: TQQQ 전량 매도 → SGOV 매수 (매매 카드 확인)']);
+if(s.ok&&s.st=='TQ'&&val('sgq')>0)L.push(['🔴','재매수 신호: SGOV 전량 매도 → TQQQ 매수 (매매 카드 확인)']);
 if(val('vfq')>0)L.push(['🟡','남은 VFLO 정리 → 기존 7:3 정리 카드 확인']);
 if(D.lm!==m)L.push(['🟡',`이번 달 적립 매수 기록 없음 → 적립일에 ① 카드대로 매수 후 ${B(`D.lm='${m}';go()`,'적립 완료 기록')}`]);
 if(s.st=='TQ'&&isFinite(s.dd)&&s.dd<=-(s.sp-.03))L.push(['🟡',`QQQ가 매도선에 가깝습니다 (낙폭 ${f(s.dd*100,1)}%, 매도선 ${U(s.sellAt)})`]);
@@ -226,6 +226,9 @@ $('banner').innerHTML=`<div style="display:flex;justify-content:space-between;ga
 <div class="sm" style="margin-top:6px">TQQQ ${U(tv)} (${W(tv*fx)}) + SGOV ${U(sv)} (${W(sv*fx)})${vv?' + VFLO '+U(vv):''} + 현금 ${W(usd*fx+cash)}<br>비중: TQQQ ${f(p(tv*fx),1)}% / SGOV ${f(p(sv*fx),1)}%${vv?' / VFLO '+f(p(vv*fx),1)+'%':''} / 현금 ${f(p(usd*fx+cash),1)}%</div>`;
 $('sigc').innerHTML=sigCard(sig);
 if($('h52m'))$('h52m').innerHTML=`<label>52주 최고가 날짜 <b class="tg tg-a">자동</b></label><div class="ro f-a">${D.h52d||'-'}<div class="sm">${D.h52s||'증권사 앱 값으로 고쳐도 됩니다'}</div></div>`;
+const gap=p=>sig.qq&&isFinite(p)?(p>=sig.qq?'+':'')+f((p/sig.qq-1)*100,1)+'%':'-';
+if($('sellm'))$('sellm').innerHTML=`<label>전액 현금 전환 가격 (QQQ 종가 -${f(sig.sp*100,0)}%) <b class="tg tg-a">자동</b></label><div class="ro f-a" style="color:var(--r)"><b>${sig.h?U(sig.sellAt):'-'}</b><div class="sm">QQQ 종가가 이 값 이하로 마감하면 매도 · 지금보다 ${sig.h?gap(sig.sellAt):'-'}</div></div>`;
+if($('buym'))$('buym').innerHTML=`<label>다시 매수 가격 (QQQ 종가 -${f(sig.bp*100,0)}%) <b class="tg tg-a">자동</b></label><div class="ro f-a" style="color:var(--g)"><b>${sig.h?U(sig.buyAt):'-'}</b><div class="sm">${sig.st=='SG'?'대피 중: QQQ 종가가 이 값 위로 마감하면 TQQQ 재매수':'대피한 뒤 QQQ 종가가 이 값 위로 마감하면 재매수'} · 지금보다 ${sig.h?gap(sig.buyAt):'-'}</div></div>`;
 $('res').innerHTML=plan(X);todoRender(X)}
 
 /* ---------- QLD · TQQQ · 새 기준 비교 ---------- */
