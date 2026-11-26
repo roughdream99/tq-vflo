@@ -66,9 +66,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px 4px;b
 <li>[3가지 비교 계산]을 누르면 같은 날짜에 같은 금액을 <b>QLD 100%</b>, <b>TQQQ 100%</b>에 넣었다면 지금 얼마일지(그림자)를 계산해 <b>새 기준으로 굴린 내 계좌</b>와 나란히 보여 줍니다.</li>
 <li>새 기준으로 바꾼 날부터 비교하려면 기존 내역을 지우고, 첫 줄에 오늘 날짜와 지금 계좌 평가금(달러)을 넣으세요.</li></ol></details>
 <details><summary>4. 문제가 생겼을 때</summary><ul>
-<li><b>조회 실패:</b> GitHub가 장 마감 뒤(한국 시간 아침) 받아 둔 종가를 먼저 쓰고, 아직 갱신 전이면 무료 프록시로 직접 조회하는데 이 방식은 가끔 막힙니다. 잠시 뒤 다시 누르거나 직접 입력하세요. GitHub 저장소 Actions 탭에서 'Update market data'를 실행하면 저장 종가가 바로 갱신됩니다.</li>
-<li><b>52주 최고가가 "종가 기준"으로 표시될 때:</b> 저장 종가 대신 프록시로 받은 경우라 장중 고가 대신 종가 최고치를 썼습니다. 증권사 앱의 52주 최고가로 직접 고쳐도 됩니다.</li>
-<li><b>입력값이 사라졌을 때:</b> 다른 브라우저로 열면 보이지 않을 수 있습니다. 백업 코드로 복원하세요.</li></ul></details>
+<li><b>시세는 어디서 오나요:</b> ① GitHub가 매일 저장해 두는 종가 파일(지난 기록)과 ② 내 구글 드라이브의 「TQQQ 대시보드 시세」 시트(구글 금융 시세)를 함께 읽습니다. 저장 파일이 아직 갱신 전이어도 구글 시세로 최신 종가를 채웁니다. 이 시트는 지우거나 고치지 마세요.</li><li><b>⏳ 아직 반영 전:</b> 두 곳 모두 최신 종가가 없을 때 나옵니다. 매매는 그날 밤 미국 장에서 하니 시간을 두고 다시 누르면 됩니다.</li><li><b>"연결 실패: 구글 시세"가 계속 보일 때:</b> 시트가 지워졌거나 공유가 꺼진 경우입니다. 시트의 공유 설정이 "링크가 있는 모든 사용자(뷰어)"인지 확인하세요.</li><li><b>52주 최고가가 "종가 기준"으로 표시될 때:</b> 두 곳 모두 실패해 예비 경로로 받은 경우라 장중 고가 대신 종가 최고치를 썼습니다. 증권사 앱의 52주 최고가로 직접 고쳐도 됩니다.</li><li><b>입력값이 사라졌을 때:</b> 다른 브라우저로 열면 보이지 않을 수 있습니다. 백업 코드로 복원하세요.</li></ul></details>
 </div>
 <button class="s" onclick="show()" style="width:100%;margin:12px 0">← 계산 화면으로 돌아가기</button>
 </div>
@@ -124,7 +122,7 @@ function T(urls,chk,direct,ms){const ts=[];for(const u of urls)for(const p of px
 function ypar(x){const r=JSON.parse(x).chart.result[0],q=r.indicators.quote[0].close,a=[];r.timestamp.forEach((t,i)=>{if(q[i]!=null)a.push([dstr(t),q[i]])});return a}
 const yurl=(s,qs)=>['query1','query2'].map(h=>`https://${h}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(s)}?${qs}&interval=1d&_=${Date.now()}`);
 const okD=t=>{try{return daily(ypar(t))}catch(e){return false}};
-/* GitHub Actions가 장 마감 뒤 받아 두는 종가 파일. 최신이면 프록시를 쓰지 않음 */
+/* GitHub Actions가 장 마감 뒤 받아 두는 종가 파일(지난 기록용) */
 const RAW='https://raw.githubusercontent.com/roughdream99/tq-vflo/main/data.json';let DJ=null;
 const nyp=ms=>Object.fromEntries(ETF({year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(new Date(ms)).map(o=>[o.type,o.value]));
 const nys=ms=>{const p=nyp(ms);return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`};
@@ -151,34 +149,54 @@ if(!isFinite(dd))st=D.sig||'TQ';else if(dd<=-sp)st='SG';else if(dd>-bp)st='TQ';
 else st=(D.sig&&D.sigk==sp+'/'+bp)?D.sig:(val('sgq')>0&&!(val('qty')>0)?'SG':'TQ');
 return {ok:isFinite(dd),st,dd,sp,bp,h,qq,sellAt:h*(1-sp),buyAt:h*(1-bp),sw:P?P.sw:(D.sigd||''),hid:D.h52d||'',band:isFinite(dd)&&dd<=-bp&&dd>-sp}}
 
-/* ---------- 데이터 불러오기 ---------- */
-async function load(){const b=$('lb');b.disabled=1;const t0=Date.now();let ok=[],bad=[];
+/* 구글 시트(GOOGLEFINANCE) 시세: 링크 보기 공개 시트를 바로 읽음. 토큰·프록시 필요 없음 */
+const GS='https://docs.google.com/spreadsheets/d/1K3QhJhqNBPNHJ6g6pw43mVEuZ0Q0b41EVc4jYgZIeAo/gviz/tq?tqx=out:json&sheet=q&headers=1';
+async function getGS(){try{const x=await one('',GS+'&t='+Date.now(),t=>t.includes('setResponse'),7000);
+const j=JSON.parse(x.slice(x.indexOf('(')+1,x.lastIndexOf(')')));if(j.status!='ok')return null;const o={};
+for(const r of j.table.rows){const c=r.c||[],k=c[0]&&c[0].v;if(!k)continue;const n=i=>c[i]&&typeof c[i].v=='number'&&c[i].v>0?c[i].v:NaN;
+o[String(k).trim()]={p:n(1),py:n(2),hi:n(3),h52:n(4),tt:c[5]&&c[5].v?String(c[5].v):''}}
+return o.QQQ&&isFinite(o.QQQ.p)?o:null}catch(e){return null}}
+
+/* ---------- 데이터 불러오기: ① 저장된 종가 파일(기록) + ② 구글 시세(최신 종가) ---------- */
+async function load(){const b=$('lb');b.disabled=1;const t0=Date.now();
 const set=(k,v)=>{D[k]=(+v).toFixed(2);if($(k))$(k).value=D[k]};
-const jobs=[
-['환율',async()=>{const x=await T(['https://open.er-api.com/v6/latest/USD'],t=>t.includes('KRW'),true);set('fx',JSON.parse(x).rates.KRW)}],
+$('ls').textContent='조회 중...';
+const [dj,G]=await Promise.all([getDJ(),getGS()]);DJ=dj;
+const MP={TQQQ:'tq',QLD:'ql',SGOV:'sg',VFLO:'vf'};let got=0;
+if(DJ){try{const F=DJ.fails||[];
+for(const s in MP){const v=DJ.px&&DJ.px[s];if(v&&!F.includes(s)){set(MP[s],v[1]);LD[s]=v[0];got++}}
+if(Array.isArray(DJ.qqq)&&DJ.qqq.length>=260&&!F.includes('QQQ')){QH=DJ.qqq.map(r=>r.slice());LD.QQQ=QH.at(-1)[0];got++}
+if(DJ.fx&&!F.includes('FX'))set('fx',DJ.fx[1])}catch(e){}}
+const lc=lastClose().slice(0,10),now=nys(Date.now()),near=(a,c,t)=>isFinite(a)&&isFinite(c)&&Math.abs(a/c-1)<t;let st='';
+if(G){const g=G.QQQ,gd=g.tt.slice(0,10),last=QH&&QH.at(-1);
+ if(last&&gd==last[0]&&near(g.p,last[1],.002))st='same';
+ else if(last&&gd>last[0]&&now>=gd+' 16:20'&&near(g.py,last[1],.002)){
+  QH.push([gd,g.p,isFinite(g.hi)?Math.max(g.hi,g.p):g.p]);LD.QQQ=gd;st='new';
+  for(const s in MP){const x=G[s];if(x&&isFinite(x.p)){set(MP[s],x.p);LD[s]=gd}}}
+ else if(!last){st='gonly';set('qq',g.p);if(isFinite(g.h52)){set('h52',g.h52);D.h52d='';D.h52s='구글 52주 고가'}
+  for(const s in MP){const x=G[s];if(x&&isFinite(x.p)){set(MP[s],x.p);LD[s]=gd}}LD.QQQ=gd;got++}
+ else if(gd>last[0])st='live';
+ if(G.USDKRW&&isFinite(G.USDKRW.p))set('fx',G.USDKRW.p)}
+if(QH&&QH.length>=252){let m=0,md='';QH.slice(-252).forEach(v=>{if(v[2]>m){m=v[2];md=v[0]}});set('qq',QH.at(-1)[1]);set('h52',m);D.h52d=md;D.h52s='장중 고가 기준'}
+/* 둘 다 실패했을 때만 예전 방식(프록시)으로 시도 */
+let bad=[];if(!got){$('ls').textContent='조회 중... (예비 경로로 직접 조회)';
+const jobs=[['환율',async()=>{const x=await T(['https://open.er-api.com/v6/latest/USD'],t=>t.includes('KRW'),true);set('fx',JSON.parse(x).rates.KRW)}],
 ['TQQQ',async()=>set('tq',(await cl('TQQQ',['3mo','6mo'])).at(-1))],
-['QLD',async()=>set('ql',(await cl('QLD',['3mo','6mo'])).at(-1))],
 ['SGOV',async()=>set('sg',(await cl('SGOV',['3mo','6mo'])).at(-1))],
 ['QQQ',async()=>{const c=await cl('QQQ',['2y','5y']);if(c.length<260)throw 0;QH=c.d.map((d,i)=>[d,c[i],c[i]]);let m=0,md='';QH.slice(-252).forEach(v=>{if(v[2]>m){m=v[2];md=v[0]}});set('qq',c.at(-1));set('h52',m);D.h52d=md;D.h52s='종가 기준'}]];
 if(val('vfq')>0)jobs.push(['VFLO',async()=>set('vf',(await cl('VFLO',['3mo','6mo'])).at(-1))]);
-const run=async j=>{try{await j[1]();ok.push(j[0]);$('ls').textContent='조회 중... 완료: '+ok.join(', ');go()}catch(e){bad.push(j)}};
-$('ls').textContent='조회 중... (저장된 종가 확인)';
-let fresh=false,src='';DJ=await getDJ();
-if(DJ){try{const F=DJ.fails||[],MP={TQQQ:'tq',QLD:'ql',SGOV:'sg',VFLO:'vf',QQQ:'qq'};
-for(const s in MP){if(s=='VFLO'&&!(val('vfq')>0))continue;const v=DJ.px&&DJ.px[s];if(!v||F.includes(s))continue;
-if(s=='QQQ'){if(!DJ.h52||!Array.isArray(DJ.qqq)||DJ.qqq.length<260)continue;QH=DJ.qqq;set('h52',DJ.h52.v);D.h52d=DJ.h52.d;D.h52s='장중 고가 기준'}
-set(MP[s],v[1]);LD[s]=v[0];ok.push(s)}
-if(DJ.fx&&!F.includes('FX')){set('fx',DJ.fx[1]);ok.push('환율')}
-const up=Date.parse(DJ.updated_utc);fresh=up>0&&nys(up)>=lastClose();src=' (저장된 종가, 뉴욕 '+nys(up).slice(5)+' 갱신)';go()}catch(e){ok=[]}}
-const fromDJ=ok.slice();if(!fresh)ok=[];
-const todo=jobs.filter(j=>!ok.includes(j[0]));
-if(todo.length){$('ls').textContent='조회 중... '+(fresh?'':'저장된 종가가 최신이 아니라 직접 조회합니다');
-await Promise.all(todo.map(run));
-if(bad.length&&!DJ){const rt=bad.splice(0);await Promise.all(rt.map(run))}}
-if(!bad.length)D.ts=new Date().toDateString();
-const keep=bad.map(j=>j[0]).filter(n=>fromDJ.includes(n));
-$('ls').textContent=(bad.length?'실패: '+bad.map(j=>j[0]).join(', ')+(keep.length?' (이전 저장 종가 사용 중: '+keep.join(', ')+')':'')+' → 다시 누르거나 직접 입력하세요. ':'전체 성공'+(todo.length?'':src)+'. ')+(ok.length?'성공: '+ok.join(', '):'')+(LD.QQQ?' / 기준일(종가) QQQ '+LD.QQQ.slice(5)+' · TQQQ '+(LD.TQQQ||'-').slice(5):'')+' / '+((Date.now()-t0)/1000).toFixed(1)+'초';
-b.disabled=0;save();refresh()}
+if(val('qldq')>0)jobs.push(['QLD',async()=>set('ql',(await cl('QLD',['3mo','6mo'])).at(-1))]);
+await Promise.all(jobs.map(async j=>{try{await j[1]()}catch(e){bad.push(j[0])}}))}
+const qd=LD.QQQ||'',fresh=!!qd&&(st=='new'||st=='same'||qd>=lc);
+if(fresh)D.ts=new Date().toDateString();
+const md=s=>s?s.slice(5).replace('-','/'):'-',sec=((Date.now()-t0)/1000).toFixed(1)+'초';
+let msg;
+if(!qd)msg='❌ 시세를 받지 못했습니다'+(bad.length?' ('+bad.join(', ')+')':'')+'. 잠시 후 다시 누르거나 직접 입력하세요.';
+else if(fresh)msg=`✅ 최신 종가 반영 완료 — 미국 ${md(qd)} 종가 기준`+(st=='new'?' (구글 시세)':'');
+else msg=`⏳ 미국 ${md(qd)} 종가 기준입니다. ${md(lc)} 종가는 아직 반영 전이에요. 매매는 오늘 밤 미국 장에서 하니 시간을 두고 다시 눌러 보세요.`+(st=='live'?' (지금은 미국 장 진행 중)':'');
+const diag=[];if(!DJ)diag.push('저장 파일');if(!G)diag.push('구글 시세');
+$('ls').textContent=msg+(diag.length?' · 연결 실패: '+diag.join(', '):'')+' · '+sec;
+b.disabled=0;go();save();refresh()}
 
 /* ---------- 신호 카드 ---------- */
 function sigCard(s){if(!s.h||!s.qq)return big('현재 신호','QQQ 종가·52주 최고가 필요','[시장 데이터 불러오기]를 누르거나 직접 입력하세요.','hold');
@@ -205,7 +223,7 @@ return big(`① 이번 달 적립 (${isTQ?'TQQQ 보유 구간':'SGOV 대피 구�
 function todos(X){const L=[],t=td(),m=t.slice(0,7),B=(c,tx)=>`<button class="s" style="padding:4px 10px;font-size:12px" onclick="${c}">${tx}</button>`,s=X.sig;
 const miss=M.filter(([k])=>vis(k)&&!val(k)).map(([,l])=>l.replace(/\(.*?\)/,''));
 if(miss.length)L.push(['🔴',`시장 데이터가 비어 있습니다 (${miss.join(', ')}) → 직접 입력하거나 [불러오기]를 다시 누르세요`]);
-else if(D.ts!==new Date().toDateString())L.push(['🟡','오늘 자동 조회가 완료되지 않았습니다 (이전 값 사용 중) → [불러오기]']);
+else if(D.ts!==new Date().toDateString())L.push(['🟡','최신 종가가 아직 반영되지 않았습니다 (이전 종가 사용 중) → 시간을 두고 [불러오기]']);
 if(s.ok&&s.st=='SG'&&X.qty>0)L.push(['🔴','매도 신호: TQQQ 전량 매도 → SGOV 매수 (매매 카드 확인)']);
 if(s.ok&&s.st=='TQ'&&val('sgq')>0)L.push(['🔴','재매수 신호: SGOV 전량 매도 → TQQQ 매수 (매매 카드 확인)']);
 if(val('vfq')>0)L.push(['🟡','남은 VFLO 정리 → 기존 7:3 정리 카드 확인']);
